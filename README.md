@@ -48,7 +48,7 @@ Full setup and development docs will land as each phase ships. See [DESIGN.md](D
 ## Roadmap
 
 - [x] Phase 0 — Repo skeleton: Docker, CI, pinned dependencies
-- [ ] Phase 1 — Ingestion + data validation
+- [x] Phase 1 — Ingestion + data validation
 - [ ] Phase 2 — Feature pipeline + baseline model + registry
 - [ ] Phase 3 — Champion/challenger gate + scheduled retraining
 - [ ] Phase 4 — Prediction API + versioned prediction logging
