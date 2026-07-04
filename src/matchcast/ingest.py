@@ -30,8 +30,18 @@ from matchcast.validation import MATCH_BATCH_SCHEMA
 SOURCE = "football-data.org"
 
 
-def normalize_match(raw: dict) -> dict:
-    """Flatten one API match object into our canonical row shape."""
+def normalize_match(raw: dict) -> dict | None:
+    """Flatten one API match object into our canonical row shape.
+
+    Returns None for fixtures where teams aren't determined yet
+    (e.g. future knockout slots like "Winner Match 97") — nothing
+    useful to store or predict until both teams are known.
+    """
+    home_team = raw.get("homeTeam") or {}
+    away_team = raw.get("awayTeam") or {}
+    if home_team.get("id") is None or away_team.get("id") is None:
+        return None
+
     score = raw.get("score") or {}
     full_time = score.get("fullTime") or {}
     return {
@@ -39,12 +49,12 @@ def normalize_match(raw: dict) -> dict:
         "tournament_id": "WC2026",
         "stage": raw.get("stage"),
         "status": raw["status"],
-        "home_team_source_id": raw["homeTeam"]["id"],
-        "away_team_source_id": raw["awayTeam"]["id"],
-        "home_team_name": raw["homeTeam"]["name"],
-        "away_team_name": raw["awayTeam"]["name"],
-        "home_team_tla": raw["homeTeam"].get("tla"),
-        "away_team_tla": raw["awayTeam"].get("tla"),
+        "home_team_source_id": home_team["id"],
+        "away_team_source_id": away_team["id"],
+        "home_team_name": home_team["name"],
+        "away_team_name": away_team["name"],
+        "home_team_tla": home_team.get("tla"),
+        "away_team_tla": away_team.get("tla"),
         "home_goals": full_time.get("home"),
         "away_goals": full_time.get("away"),
         "winner": score.get("winner"),
@@ -97,10 +107,13 @@ def _upsert_matches(session, df: pd.DataFrame, team_ids: dict[int, int]) -> int:
 
 def run_ingest(session_factory, client: FootballDataClient) -> dict:
     raw_matches = client.get_competition_matches("WC")
-    if not raw_matches:
-        return {"fetched": 0, "loaded": 0, "quarantined": False}
 
-    rows = [normalize_match(m) for m in raw_matches]
+    rows = [r for r in (normalize_match(m) for m in raw_matches) if r is not None]
+    skipped = len(raw_matches) - len(rows)
+
+    if not rows:
+        return {"fetched": len(raw_matches), "loaded": 0, "skipped": skipped, "quarantined": False}
+
     df = pd.DataFrame(rows)
 
     with session_factory() as session:
@@ -115,13 +128,18 @@ def run_ingest(session_factory, client: FootballDataClient) -> dict:
                 )
             )
             session.commit()
-            return {"fetched": len(rows), "loaded": 0, "quarantined": True}
+            return {
+                "fetched": len(raw_matches),
+                "loaded": 0,
+                "skipped": skipped,
+                "quarantined": True,
+            }
 
         team_ids = _upsert_teams(session, df)
         loaded = _upsert_matches(session, df, team_ids)
         session.commit()
 
-    return {"fetched": len(rows), "loaded": loaded, "quarantined": False}
+    return {"fetched": len(raw_matches), "loaded": loaded, "skipped": skipped, "quarantined": False}
 
 
 if __name__ == "__main__":
