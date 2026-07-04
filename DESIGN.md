@@ -60,6 +60,11 @@ FastAPI. Key endpoints:
 - Player-level predictions (goal scorer, MOTM) — requires paid event-level data; low signal for an MLOps portfolio
 - Hosted MLflow / heavyweight registry — the minimal registry table is appropriate at this scale; the README notes what would replace it at production scale
 - Betting-adjacent use — free-tier data latency makes this unsuitable, and it is not the goal
+- Real pre-tournament Elo bootstrap (eloratings.net snapshot) — deferred under
+  tournament timeline pressure; teams currently seed at neutral 1500 and Elo
+  differentials sharpen only as WC2026 matches accumulate. Documented limitation
+  for METHODOLOGY.md: holdout Brier only modestly beats the 0.667 random-guess
+  baseline early in this dataset's life for exactly this reason.
 
 ## Post-tournament plan
 
