@@ -203,3 +203,26 @@ def build_upcoming_features(session: Session, tournament_id: str = "WC2026") -> 
         _apply_result(home, away, match)
 
     return upcoming
+
+def get_current_team_states(
+    session: Session, tournament_id: str = "WC2026"
+) -> dict[int, TeamState]:
+    """Every team's current Elo/form state, as of the most recently
+    ingested data. Used by simulate.py to score hypothetical future
+    matchups (e.g. a quarterfinal between two teams not yet paired).
+
+    Reuses the same walk-and-update mechanics as the other two
+    functions, but returns only the final state, not per-match rows.
+    """
+    matches = _all_matches_chronological(session, tournament_id)
+    state: dict[int, TeamState] = {}
+
+    def get_state(team_id: int) -> TeamState:
+        return state.setdefault(team_id, TeamState())
+
+    for match in matches:
+        home = get_state(match.home_team_id)
+        away = get_state(match.away_team_id)
+        _apply_result(home, away, match)
+
+    return state
