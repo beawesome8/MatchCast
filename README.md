@@ -50,7 +50,7 @@ Full setup and development docs will land as each phase ships. See [DESIGN.md](D
 - [x] Phase 0 — Repo skeleton: Docker, CI, pinned dependencies
 - [x] Phase 1 — Ingestion + data validation
 - [x] Phase 2 — Feature pipeline + baseline model + registry
-- [ ] Phase 3 — Champion/challenger gate + scheduled retraining
+- [x] Phase 3 — Champion/challenger gate + scheduled retraining
 - [ ] Phase 4 — Prediction API + versioned prediction logging
 - [ ] Phase 5 — Monte Carlo tournament simulation
 - [ ] Phase 6 — Live in-match win probability
