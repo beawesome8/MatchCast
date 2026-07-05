@@ -48,3 +48,20 @@ class IngestionQuarantine(Base):
     source: Mapped[str] = mapped_column(String(50))
     reason: Mapped[str] = mapped_column(Text)
     payload: Mapped[str] = mapped_column(Text)  # the rejected batch, as JSON
+    
+    
+class ModelVersion(Base):
+    __tablename__ = "model_versions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    model_path: Mapped[str] = mapped_column(String(255))
+    data_hash: Mapped[str] = mapped_column(String(32))
+    n_train: Mapped[int]
+    n_holdout: Mapped[int]
+    train_brier: Mapped[float]
+    holdout_brier: Mapped[float]
+    holdout_log_loss: Mapped[float]
+    beats_random_baseline: Mapped[bool | None]
+    status: Mapped[str] = mapped_column(String(20), index=True)  # champion / rejected / retired
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
