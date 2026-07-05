@@ -56,7 +56,7 @@ class ModelVersion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     model_path: Mapped[str] = mapped_column(String(255))
-    model_bytes: Mapped[bytes] = mapped_column(LargeBinary)
+    model_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     data_hash: Mapped[str] = mapped_column(String(32))
     n_train: Mapped[int]
     n_holdout: Mapped[int]
