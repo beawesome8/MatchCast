@@ -113,8 +113,14 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
         select(func.count()).select_from(IngestionQuarantine)
     ).scalar_one()
 
+    # Order by created_at, then by id as a tiebreaker — two models
+    # trained in rapid succession can land on the identical timestamp
+    # at whatever resolution the database stores; id is monotonically
+    # increasing and can't tie, so it's a safe secondary sort key.
     latest_model = session.execute(
-        select(ModelVersion).order_by(ModelVersion.created_at.desc()).limit(1)
+        select(ModelVersion)
+        .order_by(ModelVersion.created_at.desc(), ModelVersion.id.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
     return PerformanceSummary(

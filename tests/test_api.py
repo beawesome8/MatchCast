@@ -64,3 +64,10 @@ def test_monitoring_performance_returns_summary(session_factory, monkeypatch):
     body = response.json()
     assert "n_predictions_logged" in body
     assert "calibration" in body
+    
+def test_dashboard_root_serves_html(session_factory, monkeypatch):
+    client = _client(session_factory, monkeypatch)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "MatchCast" in response.text

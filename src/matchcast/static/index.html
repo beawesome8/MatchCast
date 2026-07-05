@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MatchCast</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --home: #3fb950;
+    --draw: #d29922;
+    --away: #f85149;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h2 {
+    font-size: 1.05rem;
+    margin: 0 0 1rem;
+    color: var(--text);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .match {
+    border-bottom: 1px solid var(--border);
+    padding: 0.9rem 0;
+  }
+  .match:last-child { border-bottom: none; }
+  .match-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+  .match-meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
+  .prob-bar {
+    display: flex;
+    height: 22px;
+    border-radius: 5px;
+    overflow: hidden;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  .prob-bar div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0d1117;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .prob-home { background: var(--home); }
+  .prob-draw { background: var(--draw); }
+  .prob-away { background: var(--away); }
+  .stat-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .stat {
+    flex: 1;
+    min-width: 140px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 0.9rem;
+    text-align: center;
+  }
+  .stat .value { font-size: 1.5rem; font-weight: 700; }
+  .stat .label { color: var(--muted); font-size: 0.75rem; margin-top: 0.2rem; }
+  .muted-note { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 2rem;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚽ MatchCast</h1>
+  <p class="subtitle">Self-retraining World Cup 2026 match predictions — live, verifiable, honest about what it doesn't know yet.</p>
+
+  <div class="card" id="health-card">
+    <h2>Current champion <span class="badge" id="champion-badge">loading…</span></h2>
+    <p class="muted-note" id="health-detail">Checking model status…</p>
+  </div>
+
+  <div class="card">
+    <h2>Upcoming predictions</h2>
+    <div id="predictions">Loading predictions… (if this takes 30-60 seconds, the free-tier server is waking up)</div>
+  </div>
+
+  <div class="card">
+    <h2>Model performance</h2>
+    <div id="performance">Loading performance summary…</div>
+  </div>
+
+  <div class="footer">
+    <a href="https://github.com/beawesome8/MatchCast" target="_blank">Source on GitHub</a> ·
+    <a href="https://github.com/beawesome8/MatchCast/actions" target="_blank">Retraining history</a>
+  </div>
+</div>
+
+<script>
+const pct = (x) => (x * 100).toFixed(1) + "%";
+
+async function loadHealth() {
+  try {
+    const res = await fetch("/health");
+    const data = await res.json();
+    document.getElementById("champion-badge").textContent =
+      data.champion_model_version_id ? `v${data.champion_model_version_id}` : "none yet";
+    document.getElementById("health-detail").textContent =
+      data.champion_holdout_brier != null
+        ? `Held-out Brier score: ${data.champion_holdout_brier.toFixed(4)} (lower is better; 0.667 is random guessing)`
+        : "No champion model registered yet.";
+  } catch (e) {
+    document.getElementById("health-detail").textContent = "Could not reach the API.";
+  }
+}
+
+async function loadPredictions() {
+  const el = document.getElementById("predictions");
+  try {
+    const res = await fetch("/predictions/upcoming");
+    if (!res.ok) {
+      const err = await res.json();
+      el.innerHTML = `<p class="muted-note">${err.detail || "No predictions available."}</p>`;
+      return;
+    }
+    const data = await res.json();
+    if (data.count === 0) {
+      el.innerHTML = `<p class="muted-note">No upcoming matches currently need predicting.</p>`;
+      return;
+    }
+    el.innerHTML = data.predictions.map(p => {
+      const kickoff = new Date(p.kickoff_utc).toLocaleString(undefined, {
+        weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+      });
+      return `
+        <div class="match">
+          <div class="match-top">
+            <span>${p.home_team_name} vs ${p.away_team_name}</span>
+            <span>${pct(p.prob_home)} / ${pct(p.prob_draw)} / ${pct(p.prob_away)}</span>
+          </div>
+          <div class="match-meta">${p.stage || ""} · ${kickoff}</div>
+          <div class="prob-bar">
+            <div class="prob-home" style="width:${p.prob_home * 100}%">${p.prob_home > 0.12 ? pct(p.prob_home) : ""}</div>
+            <div class="prob-draw" style="width:${p.prob_draw * 100}%">${p.prob_draw > 0.12 ? pct(p.prob_draw) : ""}</div>
+            <div class="prob-away" style="width:${p.prob_away * 100}%">${p.prob_away > 0.12 ? pct(p.prob_away) : ""}</div>
+          </div>
+        </div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="muted-note">Could not reach the API — it may still be waking up. Try refreshing in a minute.</p>`;
+  }
+}
+
+async function loadPerformance() {
+  const el = document.getElementById("performance");
+  try {
+    const res = await fetch("/monitoring/performance");
+    const data = await res.json();
+
+    if (data.n_predictions_scored === 0) {
+      el.innerHTML = `
+        <div class="stat-row">
+          <div class="stat"><div class="value">${data.n_predictions_logged}</div><div class="label">predictions logged</div></div>
+          <div class="stat"><div class="value">${data.n_predictions_pending}</div><div class="label">awaiting results</div></div>
+        </div>
+        <p class="muted-note" style="margin-top:1rem">No predictions have been scored yet — this fills in automatically as matches finish.</p>`;
+      return;
+    }
+
+    const calibrationRows = data.calibration
+      .filter(b => b.n_predictions > 0)
+      .map(b => `
+        <tr>
+          <td>${(b.range_low * 100).toFixed(0)}–${(b.range_high * 100).toFixed(0)}%</td>
+          <td>${b.n_predictions}</td>
+          <td>${pct(b.avg_predicted_probability)}</td>
+          <td>${pct(b.observed_frequency)}</td>
+        </tr>`).join("");
+
+    el.innerHTML = `
+      <div class="stat-row">
+        <div class="stat"><div class="value">${data.overall_brier_score.toFixed(4)}</div><div class="label">Brier score</div></div>
+        <div class="stat"><div class="value">${pct(data.hit_rate)}</div><div class="label">hit rate</div></div>
+        <div class="stat"><div class="value">${data.n_predictions_scored}</div><div class="label">scored</div></div>
+      </div>
+      <table style="margin-top:1.25rem">
+        <thead><tr><th>Confidence bucket</th><th>N</th><th>Avg predicted</th><th>Actually correct</th></tr></thead>
+        <tbody>${calibrationRows || "<tr><td colspan=4>Not enough data yet</td></tr>"}</tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<p class="muted-note">Could not reach the API.</p>`;
+  }
+}
+
+function loadAll() {
+  loadHealth();
+  loadPredictions();
+  loadPerformance();
+}
+
+loadAll();
+setInterval(loadAll, 60000);
+</script>
+</body>
+</html>

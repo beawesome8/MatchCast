@@ -3,8 +3,10 @@ All prediction logic lives there so it's testable without spinning
 up a real HTTP server."""
 
 from dataclasses import asdict
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 
 from matchcast.db import get_session_factory, init_db
 from matchcast.monitoring import get_performance_summary
@@ -13,6 +15,13 @@ from matchcast.serving import get_upcoming_predictions
 
 init_db()
 app = FastAPI(title="MatchCast", version="0.1.0")
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
 @app.get("/health")
