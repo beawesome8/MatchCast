@@ -3,10 +3,13 @@ which one (if any) is the current champion.
 
 This file is deliberately dumb — it does not decide whether a model
 SHOULD be promoted (that's Phase 3's job). It only records decisions
-already made and answers "what's the champion right now?" Keeping
-the decision logic and the record-keeping separate means the
-promotion gate's tests never need to touch a real database, and this
-file's tests never need to know what "better" means.
+already made and answers "what's the champion right now?"
+
+model_bytes is stored directly in the row (not just a file path)
+because model_versions written on GitHub Actions runners live on
+ephemeral disks that vanish when the job ends. Storing the trained
+model's bytes in Postgres means the registry entry is self-contained
+regardless of which machine trained it.
 """
 
 from sqlalchemy import select
@@ -19,6 +22,7 @@ from matchcast.train import TrainingResult
 def register_model(
     session: Session,
     result: TrainingResult,
+    model_bytes: bytes,
     status: str,
     rejection_reason: str | None = None,
 ) -> ModelVersion:
@@ -29,6 +33,7 @@ def register_model(
 
     entry = ModelVersion(
         model_path=result.model_path,
+        model_bytes=model_bytes,
         data_hash=result.data_hash,
         n_train=result.n_train,
         n_holdout=result.n_holdout,
@@ -45,12 +50,7 @@ def register_model(
 
 
 def promote_to_champion(session: Session, new_champion: ModelVersion) -> None:
-    """Retire the current champion (if any) and promote new_champion.
-
-    This is the only place a model's status changes after creation —
-    keeping promotion as a single, auditable operation rather than
-    scattering status writes across the codebase.
-    """
+    """Retire the current champion (if any) and promote new_champion."""
     current = get_current_champion(session)
     if current is not None and current.id != new_champion.id:
         current.status = "retired"

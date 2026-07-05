@@ -20,6 +20,7 @@ Promotion rule:
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from matchcast.clients.football_data import FootballDataClient
 from matchcast.config import settings
@@ -34,7 +35,7 @@ class PipelineResult:
     ingest_summary: dict
     n_feature_rows: int
     challenger_result: TrainingResult
-    decision: str  # "promoted" or "rejected"
+    decision: str
     reason: str
     model_version_id: int
 
@@ -76,6 +77,7 @@ def run_pipeline(session_factory, client: FootballDataClient) -> PipelineResult:
 
         rows = build_feature_table(session)
         _, challenger = train_model(rows)
+        challenger_bytes = Path(challenger.model_path).read_bytes()
 
         current_champion_entry = get_current_champion(session)
         champion_result = (
@@ -88,7 +90,7 @@ def run_pipeline(session_factory, client: FootballDataClient) -> PipelineResult:
                 holdout_brier=current_champion_entry.holdout_brier,
                 holdout_log_loss=current_champion_entry.holdout_log_loss,
                 beats_random_baseline=current_champion_entry.beats_random_baseline,
-                trained_at="",  # not needed for comparison
+                trained_at="",
             )
             if current_champion_entry is not None
             else None
@@ -100,13 +102,19 @@ def run_pipeline(session_factory, client: FootballDataClient) -> PipelineResult:
 
         if should_promote:
             entry = register_model(
-                session, challenger, status="rejected", rejection_reason="pending promotion"
+                session,
+                challenger,
+                challenger_bytes,
+                status="rejected",
+                rejection_reason="pending promotion",
             )
             promote_to_champion(session, entry)
             entry.rejection_reason = None
             decision = "promoted"
         else:
-            entry = register_model(session, challenger, status="rejected", rejection_reason=reason)
+            entry = register_model(
+                session, challenger, challenger_bytes, status="rejected", rejection_reason=reason
+            )
             decision = "rejected"
 
         session.commit()

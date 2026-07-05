@@ -1,10 +1,9 @@
 """Model registry tests.
 
-Uses a fake TrainingResult (not a real trained model) since this
-file only tests record-keeping, never training logic — that
-separation is deliberate, see registry.py's module docstring.
+Uses a fake TrainingResult and dummy bytes (not a real trained model)
+since this file only tests record-keeping, never training logic —
+that separation is deliberate, see registry.py's module docstring.
 """
-
 
 from matchcast.registry import (
     get_current_champion,
@@ -13,6 +12,8 @@ from matchcast.registry import (
     register_model,
 )
 from matchcast.train import TrainingResult
+
+FAKE_BYTES = b"not a real model, just bytes for storage testing"
 
 
 def _fake_result(holdout_brier: float = 0.5) -> TrainingResult:
@@ -32,7 +33,7 @@ def _fake_result(holdout_brier: float = 0.5) -> TrainingResult:
 def test_register_model_rejects_invalid_status(session_factory):
     with session_factory() as s:
         try:
-            register_model(s, _fake_result(), status="not_a_real_status")
+            register_model(s, _fake_result(), FAKE_BYTES, status="not_a_real_status")
             raise AssertionError("expected ValueError")
         except ValueError as exc:
             assert "invalid status" in str(exc)
@@ -41,7 +42,7 @@ def test_register_model_rejects_invalid_status(session_factory):
 def test_register_model_requires_reason_when_rejected(session_factory):
     with session_factory() as s:
         try:
-            register_model(s, _fake_result(), status="rejected")
+            register_model(s, _fake_result(), FAKE_BYTES, status="rejected")
             raise AssertionError("expected ValueError")
         except ValueError as exc:
             assert "rejection_reason" in str(exc)
@@ -54,27 +55,32 @@ def test_no_champion_when_registry_is_empty(session_factory):
 
 def test_promote_sets_status_to_champion(session_factory):
     with session_factory() as s:
-        entry = register_model(s, _fake_result(), status="rejected", rejection_reason="testing")
+        entry = register_model(
+            s, _fake_result(), FAKE_BYTES, status="rejected", rejection_reason="testing"
+        )
         promote_to_champion(s, entry)
         s.commit()
 
         champ = get_current_champion(s)
         assert champ.id == entry.id
         assert champ.status == "champion"
+        assert champ.model_bytes == FAKE_BYTES
 
 
 def test_promoting_a_new_model_retires_the_old_champion(session_factory):
     with session_factory() as s:
-        first = register_model(s, _fake_result(0.6), status="rejected", rejection_reason="testing")
+        first = register_model(
+            s, _fake_result(0.6), FAKE_BYTES, status="rejected", rejection_reason="testing"
+        )
         promote_to_champion(s, first)
         s.commit()
 
-        second = register_model(s, _fake_result(0.5), status="rejected", rejection_reason="testing")
+        second = register_model(
+            s, _fake_result(0.5), FAKE_BYTES, status="rejected", rejection_reason="testing"
+        )
         promote_to_champion(s, second)
         s.commit()
 
-        # Exactly one champion must exist at any time — this is the
-        # property the whole registry design depends on.
         s.refresh(first)
         assert first.status == "retired"
         assert get_current_champion(s).id == second.id
@@ -82,8 +88,12 @@ def test_promoting_a_new_model_retires_the_old_champion(session_factory):
 
 def test_list_history_returns_every_model_in_order(session_factory):
     with session_factory() as s:
-        first = register_model(s, _fake_result(0.6), status="rejected", rejection_reason="worse")
-        second = register_model(s, _fake_result(0.5), status="rejected", rejection_reason="testing")
+        first = register_model(
+            s, _fake_result(0.6), FAKE_BYTES, status="rejected", rejection_reason="worse"
+        )
+        second = register_model(
+            s, _fake_result(0.5), FAKE_BYTES, status="rejected", rejection_reason="testing"
+        )
         promote_to_champion(s, second)
         s.commit()
 

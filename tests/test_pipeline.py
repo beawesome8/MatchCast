@@ -12,9 +12,13 @@ from matchcast.pipeline import PipelineResult, decide_promotion, run_pipeline
 from matchcast.train import TrainingResult
 
 
-def _result(holdout_brier: float, beats_baseline: bool = True) -> TrainingResult:
+def _result(
+    holdout_brier: float,
+    beats_baseline: bool = True,
+    model_path: str = "artifacts/fake.json",
+) -> TrainingResult:
     return TrainingResult(
-        model_path="artifacts/fake.json",
+        model_path=model_path,
         data_hash="abc",
         n_train=70,
         n_holdout=18,
@@ -34,10 +38,6 @@ def test_rejects_challenger_that_fails_random_baseline_even_with_no_champion():
 
 
 def test_rejects_challenger_that_fails_random_baseline_even_if_better_than_champion():
-    # Pathological but real case: challenger scores better than champion
-    # numerically, but neither actually beats random guessing. Both are
-    # bad; we should never promote a model that fails the baseline check,
-    # regardless of how it compares to an equally-bad champion.
     challenger = _result(holdout_brier=0.7, beats_baseline=False)
     champion = _result(holdout_brier=0.75, beats_baseline=False)
     should_promote, reason = decide_promotion(challenger, champion)
@@ -76,9 +76,6 @@ def test_rejects_challenger_that_is_worse_than_champion():
 
 
 def test_rejects_challenger_exactly_at_tolerance_boundary_is_promoted():
-    # improvement == tolerance exactly: our rule uses >=, so this SHOULD
-    # promote. This test exists specifically to pin down that boundary,
-    # since off-by-one errors on >= vs > are a classic source of bugs.
     challenger = _result(holdout_brier=0.50)
     champion = _result(holdout_brier=0.55)
     should_promote, _ = decide_promotion(challenger, champion, tolerance=0.05)
@@ -90,14 +87,17 @@ class FakeClient:
         return []
 
 
-def test_run_pipeline_returns_a_pipeline_result(session_factory, monkeypatch):
-    # Patch train_model to avoid needing 10+ real feature rows in this
-    # unit test — run_pipeline's own orchestration is what's under test
-    # here, not the training math (already covered by test_train.py).
+def test_run_pipeline_returns_a_pipeline_result(session_factory, monkeypatch, tmp_path):
     import matchcast.pipeline as pipeline_module
 
+    # run_pipeline reads real bytes from disk at challenger.model_path,
+    # so the fake training result must point at a file that actually
+    # exists — a temp file stands in for a real model artifact here.
+    fake_model_file = tmp_path / "fake_model.json"
+    fake_model_file.write_bytes(b"fake model bytes for this test")
+
     def fake_train_model(rows, train_fraction=0.8):
-        return None, _result(holdout_brier=0.5)
+        return None, _result(holdout_brier=0.5, model_path=str(fake_model_file))
 
     monkeypatch.setattr(pipeline_module, "train_model", fake_train_model)
 
