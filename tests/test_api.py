@@ -56,3 +56,11 @@ def test_predictions_upcoming_returns_real_predictions(session_factory, monkeypa
     body = response.json()
     assert body["count"] == 1
     assert body["predictions"][0]["home_team_name"] == "Brazil"
+    
+def test_monitoring_performance_returns_summary(session_factory, monkeypatch):
+    client = _client(session_factory, monkeypatch)
+    response = client.get("/monitoring/performance")
+    assert response.status_code == 200
+    body = response.json()
+    assert "n_predictions_logged" in body
+    assert "calibration" in body
