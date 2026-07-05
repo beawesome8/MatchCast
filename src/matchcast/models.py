@@ -66,3 +66,17 @@ class ModelVersion(Base):
     beats_random_baseline: Mapped[bool | None]
     status: Mapped[str] = mapped_column(String(20), index=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    
+class PredictionLog(Base):
+    __tablename__ = "predictions_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), index=True)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_versions.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    prob_home: Mapped[float]
+    prob_draw: Mapped[float]
+    prob_away: Mapped[float]
+    # Filled in later, once the match finishes (a future scoring job):
+    actual_outcome: Mapped[str | None] = mapped_column(String(12))
+    brier_score: Mapped[float | None]
