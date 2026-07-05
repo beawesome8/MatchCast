@@ -65,6 +65,13 @@ FastAPI. Key endpoints:
   differentials sharpen only as WC2026 matches accumulate. Documented limitation
   for METHODOLOGY.md: holdout Brier only modestly beats the 0.667 random-guess
   baseline early in this dataset's life for exactly this reason.
+- Model artifact persistence across CI runs — GitHub Actions runners are
+  ephemeral, so `artifacts/*.json` files don't survive between scheduled
+  runs. The registry's metadata (Brier scores, status) persists correctly
+  in Postgres, so retraining/promotion logic is unaffected. Phase 4
+  (serving) will need real artifact storage (e.g. uploaded as a workflow
+  artifact, or stored as bytes in the database) to actually load a
+  champion model for prediction.
 
 ## Post-tournament plan
 
