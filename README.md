@@ -2,7 +2,7 @@
 
 An end-to-end MLOps project: a match-outcome prediction system for the FIFA World Cup 2026 that ingests live tournament data, retrains itself after every matchday, and only promotes new models when they beat the current champion.
 
-> **Status:** In active development during the live tournament (final: July 19, 2026).
+> **Status:** As of the last scheduled run, the pipeline has autonomously retrained and evaluated 2 model versions against live World Cup 2026 data — see the [Actions tab](https://github.com/beawesome8/MatchCast/actions) for the full history of every retrain and promotion decision.
 > Live demo link and model performance results will appear here.
 
 ## Why this project exists

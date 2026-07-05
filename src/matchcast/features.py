@@ -12,6 +12,20 @@ given the compressed tournament timeline, rather than silently.
 All features for a given match use only data strictly before that
 match's kickoff — no leakage from the match's own result or from
 matches that happen later.
+
+Two public functions share one feature formula (_pre_match_features)
+to guarantee training and serving can never compute features
+differently — a mismatch there (train/serve skew) is a classic,
+easy-to-miss source of silently bad predictions:
+
+  build_feature_table(session)     -> training rows (FINISHED matches)
+  build_upcoming_features(session) -> prediction rows (not-yet-played)
+
+The two functions deliberately do NOT share their iteration loop, only
+the math. build_feature_table is already running in production against
+a live champion model; keeping its control flow untouched avoids
+risking a regression there for the sake of avoiding a few duplicated
+lines of straightforward bookkeeping in build_upcoming_features.
 """
 
 from dataclasses import dataclass, field
@@ -59,15 +73,55 @@ class TeamState:
     recent_goal_diff: list = field(default_factory=list)
 
 
-def build_feature_table(session: Session, tournament_id: str = "WC2026") -> list[dict]:
-    """Walk all matches in kickoff order, computing pre-match features
-    for each, then updating each team's rolling state with the result.
+def _pre_match_features(home: TeamState, away: TeamState, is_knockout: int) -> dict:
+    """The one true feature formula. Both training and prediction call
+    this — never compute these values any other way, anywhere."""
+    home_form_ppg = (
+        sum(home.recent_points) / len(home.recent_points) if home.recent_points else 1.0
+    )
+    away_form_ppg = (
+        sum(away.recent_points) / len(away.recent_points) if away.recent_points else 1.0
+    )
+    home_gd_avg = (
+        sum(home.recent_goal_diff) / len(home.recent_goal_diff)
+        if home.recent_goal_diff
+        else 0.0
+    )
+    away_gd_avg = (
+        sum(away.recent_goal_diff) / len(away.recent_goal_diff)
+        if away.recent_goal_diff
+        else 0.0
+    )
+    return {
+        "elo_diff": home.elo - away.elo,
+        "home_form_ppg": home_form_ppg,
+        "away_form_ppg": away_form_ppg,
+        "goal_diff_diff": home_gd_avg - away_gd_avg,
+        "is_knockout": is_knockout,
+    }
 
-    Returns one row per FINISHED match, suitable for training.
-    Matches without a resolved result are skipped here — they belong
-    in prediction, not training (that's Phase 4's job).
-    """
-    matches = (
+
+def _apply_result(home: TeamState, away: TeamState, match: Match) -> None:
+    """Update both teams' rolling state after a resolved match. Mutates
+    in place. Called only for matches with a known result."""
+    home_score = _match_score(match, match.home_team_id)
+    if home_score is None:
+        return
+
+    home.elo, away.elo = _elo_update(home.elo, away.elo, home_score)
+
+    home_points = 3.0 if home_score == 1.0 else (1.0 if home_score == 0.5 else 0.0)
+    away_points = 3.0 if home_score == 0.0 else (1.0 if home_score == 0.5 else 0.0)
+    home.recent_points = (home.recent_points + [home_points])[-FORM_WINDOW:]
+    away.recent_points = (away.recent_points + [away_points])[-FORM_WINDOW:]
+
+    gd = (match.home_goals or 0) - (match.away_goals or 0)
+    home.recent_goal_diff = (home.recent_goal_diff + [gd])[-FORM_WINDOW:]
+    away.recent_goal_diff = (away.recent_goal_diff + [-gd])[-FORM_WINDOW:]
+
+
+def _all_matches_chronological(session: Session, tournament_id: str) -> list[Match]:
+    return (
         session.execute(
             select(Match)
             .where(Match.tournament_id == tournament_id)
@@ -77,6 +131,14 @@ def build_feature_table(session: Session, tournament_id: str = "WC2026") -> list
         .all()
     )
 
+
+def build_feature_table(session: Session, tournament_id: str = "WC2026") -> list[dict]:
+    """Walk all matches in kickoff order, computing pre-match features
+    for each, then updating each team's rolling state with the result.
+
+    Returns one row per FINISHED match, suitable for training.
+    """
+    matches = _all_matches_chronological(session, tournament_id)
     state: dict[int, TeamState] = {}
 
     def get_state(team_id: int) -> TeamState:
@@ -87,47 +149,57 @@ def build_feature_table(session: Session, tournament_id: str = "WC2026") -> list
     for match in matches:
         home = get_state(match.home_team_id)
         away = get_state(match.away_team_id)
-
-        home_form_ppg = (
-            sum(home.recent_points) / len(home.recent_points) if home.recent_points else 1.0
-        )
-        away_form_ppg = (
-            sum(away.recent_points) / len(away.recent_points) if away.recent_points else 1.0
-        )
-        home_gd_avg = (
-            sum(home.recent_goal_diff) / len(home.recent_goal_diff)
-            if home.recent_goal_diff
-            else 0.0
-        )
-        away_gd_avg = (
-            sum(away.recent_goal_diff) / len(away.recent_goal_diff)
-            if away.recent_goal_diff
-            else 0.0
-        )
+        is_knockout = 0 if match.stage == "GROUP_STAGE" else 1
+        features = _pre_match_features(home, away, is_knockout)
 
         if match.status == "FINISHED" and match.winner is not None:
             rows.append({
                 "match_id": match.id,
                 "source_match_id": match.source_match_id,
-                "elo_diff": home.elo - away.elo,
-                "home_form_ppg": home_form_ppg,
-                "away_form_ppg": away_form_ppg,
-                "goal_diff_diff": home_gd_avg - away_gd_avg,
-                "is_knockout": 0 if match.stage == "GROUP_STAGE" else 1,
                 "outcome": match.winner,
+                **features,
             })
 
-        home_score = _match_score(match, match.home_team_id)
-        if home_score is not None:
-            home.elo, away.elo = _elo_update(home.elo, away.elo, home_score)
-
-            home_points = 3.0 if home_score == 1.0 else (1.0 if home_score == 0.5 else 0.0)
-            away_points = 3.0 if home_score == 0.0 else (1.0 if home_score == 0.5 else 0.0)
-            home.recent_points = (home.recent_points + [home_points])[-FORM_WINDOW:]
-            away.recent_points = (away.recent_points + [away_points])[-FORM_WINDOW:]
-
-            gd = (match.home_goals or 0) - (match.away_goals or 0)
-            home.recent_goal_diff = (home.recent_goal_diff + [gd])[-FORM_WINDOW:]
-            away.recent_goal_diff = (away.recent_goal_diff + [-gd])[-FORM_WINDOW:]
+        _apply_result(home, away, match)
 
     return rows
+
+
+def build_upcoming_features(session: Session, tournament_id: str = "WC2026") -> list[dict]:
+    """Same walk as build_feature_table, but collects rows for matches
+    that have NOT been played yet, using the current accumulated state
+    of both teams (i.e. exactly what a model would see if asked to
+    predict this match right now).
+
+    Uses the same underlying state-update mechanics as build_feature_table
+    but does not share its loop, by design — see module docstring.
+    """
+    matches = _all_matches_chronological(session, tournament_id)
+    state: dict[int, TeamState] = {}
+
+    def get_state(team_id: int) -> TeamState:
+        return state.setdefault(team_id, TeamState())
+
+    upcoming: list[dict] = []
+
+    for match in matches:
+        home = get_state(match.home_team_id)
+        away = get_state(match.away_team_id)
+        is_knockout = 0 if match.stage == "GROUP_STAGE" else 1
+        features = _pre_match_features(home, away, is_knockout)
+
+        if match.status != "FINISHED":
+            upcoming.append({
+                "match_id": match.id,
+                "source_match_id": match.source_match_id,
+                "home_team_id": match.home_team_id,
+                "away_team_id": match.away_team_id,
+                "stage": match.stage,
+                "status": match.status,
+                "kickoff_utc": match.kickoff_utc,
+                **features,
+            })
+
+        _apply_result(home, away, match)
+
+    return upcoming

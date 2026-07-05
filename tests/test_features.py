@@ -8,11 +8,130 @@ wrong, so eyeballing output isn't enough.
 
 from datetime import UTC, datetime, timedelta
 
-from matchcast.features import _elo_expected, _elo_update, build_feature_table
+from matchcast.features import (
+    _elo_expected,
+    _elo_update,
+    build_feature_table,
+    build_upcoming_features,
+)
 from matchcast.models import Match, Team
 
 START = datetime(2026, 6, 1, tzinfo=UTC)
 
+def test_upcoming_features_excludes_finished_matches(session_factory):
+    with session_factory() as s:
+        a, b = _add_team(s, 1, "A"), _add_team(s, 2, "B")
+        _add_match(s, a, b, day_offset=0, home_goals=2, away_goals=0, winner="HOME_TEAM")
+        s.commit()
+
+        upcoming = build_upcoming_features(s)
+        assert upcoming == []
+
+
+def test_upcoming_features_includes_scheduled_matches(session_factory):
+    with session_factory() as s:
+        a, b = _add_team(s, 1, "A"), _add_team(s, 2, "B")
+        scheduled = Match(
+            source_match_id=3001,
+            tournament_id="WC2026",
+            stage="GROUP_STAGE",
+            status="SCHEDULED",
+            kickoff_utc=START,
+            home_team_id=a.id,
+            away_team_id=b.id,
+            home_goals=None,
+            away_goals=None,
+            winner=None,
+        )
+        s.add(scheduled)
+        s.commit()
+
+        upcoming = build_upcoming_features(s)
+        assert len(upcoming) == 1
+        assert upcoming[0]["home_team_id"] == a.id
+        assert upcoming[0]["elo_diff"] == 0.0  # neither team has played yet
+
+
+def test_upcoming_features_reflect_prior_results(session_factory):
+    with session_factory() as s:
+        a, b, c = _add_team(s, 1, "A"), _add_team(s, 2, "B"), _add_team(s, 3, "C")
+        # A beats B convincingly, THEN A has an upcoming match against C.
+        _add_match(s, a, b, day_offset=0, home_goals=3, away_goals=0, winner="HOME_TEAM")
+        upcoming_match = Match(
+            source_match_id=3002,
+            tournament_id="WC2026",
+            stage="GROUP_STAGE",
+            status="SCHEDULED",
+            kickoff_utc=START + timedelta(days=1),
+            home_team_id=a.id,
+            away_team_id=c.id,
+            home_goals=None,
+            away_goals=None,
+            winner=None,
+        )
+        s.add(upcoming_match)
+        s.commit()
+
+        upcoming = build_upcoming_features(s)
+        assert len(upcoming) == 1
+        # A's win against B should show up as a positive elo_diff against
+        # C (who has no history) — proving state carried forward correctly.
+        assert upcoming[0]["elo_diff"] > 0.0
+
+
+def test_upcoming_features_match_training_formula_exactly(session_factory):
+    """The core guarantee this whole design exists for: if a scheduled
+    match were hypothetically played right now with a known result,
+    the pre-match features build_feature_table would have recorded for
+    it must be byte-for-byte identical to what build_upcoming_features
+    reports for it beforehand. Any divergence here is train/serve skew."""
+    with session_factory() as s:
+        a, b, c = _add_team(s, 1, "A"), _add_team(s, 2, "B"), _add_team(s, 3, "C")
+        _add_match(s, a, b, day_offset=0, home_goals=2, away_goals=1, winner="HOME_TEAM")
+        _add_match(s, b, c, day_offset=1, home_goals=1, away_goals=1, winner="DRAW")
+        s.commit()
+
+        # Snapshot what build_upcoming_features sees for a hypothetical
+        # next match between A and C, BEFORE it's played.
+        pending = Match(
+            source_match_id=3003,
+            tournament_id="WC2026",
+            stage="GROUP_STAGE",
+            status="SCHEDULED",
+            kickoff_utc=START + timedelta(days=2),
+            home_team_id=a.id,
+            away_team_id=c.id,
+            home_goals=None,
+            away_goals=None,
+            winner=None,
+        )
+        s.add(pending)
+        s.commit()
+
+        before = build_upcoming_features(s)
+        assert len(before) == 1
+        predicted_features = {
+            k: v for k, v in before[0].items()
+            if k in ("elo_diff", "home_form_ppg", "away_form_ppg", "goal_diff_diff", "is_knockout")
+        }
+
+        # Now actually play it out with a real result, and check what
+        # build_feature_table recorded as ITS pre-match features for
+        # this exact same match.
+        pending.status = "FINISHED"
+        pending.home_goals = 1
+        pending.away_goals = 0
+        pending.winner = "HOME_TEAM"
+        s.commit()
+
+        after = build_feature_table(s)
+        trained_row = next(r for r in after if r["source_match_id"] == 3003)
+        actual_features = {
+            k: v for k, v in trained_row.items()
+            if k in ("elo_diff", "home_form_ppg", "away_form_ppg", "goal_diff_diff", "is_knockout")
+        }
+
+        assert predicted_features == actual_features
 
 def _add_team(session, source_id: int, name: str) -> Team:
     team = Team(source_team_id=source_id, name=name)
