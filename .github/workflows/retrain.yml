@@ -28,10 +28,19 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
         run: python -m matchcast.pipeline | tee pipeline_result.json
 
+      - name: Score predictions against real outcomes
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m matchcast.scoring | tee scoring_result.json
+
       - name: Summarize result
         if: always()
         run: |
           echo "## Retraining run result" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat pipeline_result.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "## Scoring result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat scoring_result.json >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
