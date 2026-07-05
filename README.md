@@ -5,7 +5,9 @@
 
 A self-retraining football match prediction pipeline, built end-to-end during the live FIFA World Cup 2026. Ingests real tournament data, retrains itself on a schedule, only promotes a new model when it actually beats the current one, and logs every prediction before kickoff so its accuracy is verifiable — not just claimed.
 
-> **Live status:** the pipeline has autonomously retrained and evaluated multiple model versions against live World Cup 2026 data. See the [Actions tab](https://github.com/beawesome8/MatchCast/actions) for the full history of every retrain and promotion decision, and `GET /monitoring/performance` for real accuracy numbers as scored predictions accumulate.
+> **Live status:** the pipeline has autonomously retrained and evaluated multiple model versions against live World Cup 2026 data. See the [Actions tab](https://github.com/beawesome8/MatchCast/actions) for the full history of every retrain and promotion decision.
+>
+> **Live API:** https://matchcast-z8n4.onrender.com — try [`/health`](https://matchcast-z8n4.onrender.com/health), [`/predictions/upcoming`](https://matchcast-z8n4.onrender.com/predictions/upcoming), or [`/monitoring/performance`](https://matchcast-z8n4.onrender.com/monitoring/performance). Free-tier hosting spins down after 15 minutes idle — the first request after inactivity may take 30-60 seconds.
 
 ## Why this project exists
 
