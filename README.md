@@ -53,7 +53,7 @@ Full setup and development docs will land as each phase ships. See [DESIGN.md](D
 - [x] Phase 3 — Champion/challenger gate + scheduled retraining
 - [x] Phase 4 — Prediction API + versioned prediction logging
 - [x] Phase 5 — Monte Carlo tournament simulation
-- [ ] Phase 6 — Live in-match win probability
+- [ ] Phase 6 — Live in-match win probability (math complete, API wiring pending a live match)
 - [ ] Phase 7 — Monitoring dashboard
 - [ ] Phase 8 — Post-tournament retrospective
 
