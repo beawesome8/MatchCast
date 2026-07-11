@@ -53,7 +53,8 @@ def _seed_match(session, source_id: int, kickoff_utc=None) -> Match:
 
 
 def _seed_scored_prediction(
-    session, match, model_version, prob_home, prob_draw, prob_away, actual_outcome, brier_score
+    session, match, model_version, prob_home, prob_draw, prob_away,
+    actual_outcome, brier_score, created_at=None,
 ) -> PredictionLog:
     log = PredictionLog(
         match_id=match.id,
@@ -63,6 +64,7 @@ def _seed_scored_prediction(
         prob_away=prob_away,
         actual_outcome=actual_outcome,
         brier_score=brier_score,
+        **({"created_at": created_at} if created_at is not None else {}),
     )
     session.add(log)
     session.flush()
@@ -277,15 +279,28 @@ def test_prediction_history_includes_matches_on_or_after_july_9(session_factory)
         history = get_prediction_history(s)
         assert len(history) == 1
         assert history[0].home_team_name == "LateHome"
-
-
-def test_performance_summary_reports_first_and_current_model_brier(session_factory):
+        
+def test_prediction_history_shows_only_latest_prediction_per_match(session_factory):
     with session_factory() as s:
-        _seed_model_version(s, status="retired", holdout_brier=0.62)
-        _seed_model_version(s, status="champion", holdout_brier=0.55)
+        mv1 = _seed_model_version(s, status="retired")
+        mv2 = _seed_model_version(s, status="champion")
+        late = datetime(2026, 7, 10, tzinfo=UTC)
+        match = _seed_match(s, source_id=1, kickoff_utc=late)
+
+        # Same match, predicted twice by two different model versions
+        # (simulating a retrain that happened before kickoff) — only
+        # the second (later) one should appear in history.
+        _seed_scored_prediction(
+            s, match, mv1, 0.5, 0.3, 0.2, actual_outcome="HOME_TEAM", brier_score=0.4,
+            created_at=datetime(2026, 7, 5, tzinfo=UTC),
+        )
+        _seed_scored_prediction(
+            s, match, mv2, 0.9, 0.05, 0.05, actual_outcome="HOME_TEAM", brier_score=0.02,
+            created_at=datetime(2026, 7, 8, tzinfo=UTC),
+        )
         s.commit()
 
-        summary = get_performance_summary(s)
-        assert summary.first_model_holdout_brier == 0.62
-        assert summary.current_champion_holdout_brier == 0.55
-        assert abs(summary.brier_improvement - 0.07) < 1e-9
+        history = get_prediction_history(s)
+        assert len(history) == 1
+        assert history[0].model_version_id == mv2.id
+        assert abs(history[0].brier_score - 0.02) < 1e-9

@@ -182,22 +182,36 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
 
 
 def get_prediction_history(session: Session, limit: int = 50) -> list[PredictionHistoryEntry]:
-    """Every SCORED prediction for a match that kicked off on or after
-    HISTORY_TRACK_RECORD_START, most recent first. This is the public
-    "how did we actually do" record — deliberately scoped to the
-    Quarterfinals onward; see the module-level constant's docstring."""
+    """The most recent SCORED prediction per match, for matches that
+    kicked off on or after HISTORY_TRACK_RECORD_START, most recent
+    match first.
+
+    A single match can accumulate several logged predictions if the
+    champion retrained multiple times before kickoff (each retrain is
+    a genuinely distinct data point, kept in predictions_log). This
+    view intentionally shows only the LATEST one per match — what the
+    final champion actually predicted — since that's what a reader
+    means by "what did MatchCast call this game."
+    """
     logs = (
         session.execute(
             select(PredictionLog)
             .where(PredictionLog.actual_outcome.is_not(None))
             .order_by(PredictionLog.created_at.desc())
-            .limit(limit)
         )
         .scalars()
         .all()
     )
     if not logs:
         return []
+
+    # Keep only the first (= most recent, since we sorted desc) log
+    # seen per match_id.
+    latest_per_match: dict[int, PredictionLog] = {}
+    for log in logs:
+        if log.match_id not in latest_per_match:
+            latest_per_match[log.match_id] = log
+    logs = list(latest_per_match.values())[:limit]
 
     match_ids = {log.match_id for log in logs}
     matches = {

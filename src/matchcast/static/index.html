@@ -151,6 +151,17 @@
   </header>
 
   <section>
+    <div class="section-title">What goes into a prediction</div>
+    <p class="section-desc">MatchCast looks at four things for each match, all drawn purely from results so far in this tournament — nothing about injuries, lineups, or news:</p>
+    <div class="card">
+      <p><strong style="color:var(--gold)">Team strength (Elo rating).</strong> A running skill score for each team that rises after wins and falls after losses — bigger wins against stronger opponents count for more. Same idea chess ratings use.</p>
+      <p style="margin-top:0.8rem"><strong style="color:var(--gold)">Recent form.</strong> How many points per game (win = 3, draw = 1, loss = 0) each team has earned over its last 5 matches. A team on a hot streak scores higher here.</p>
+      <p style="margin-top:0.8rem"><strong style="color:var(--gold)">Recent goal difference.</strong> Not just win or lose — by how much. Convincing results count for more than narrow ones.</p>
+      <p style="margin-top:0.8rem"><strong style="color:var(--gold)">Knockout stage.</strong> Whether it's a knockout match at all — teams often play more cautiously once there's no next group match to fall back on.</p>
+    </div>
+  </section>
+
+  <section>
     <div class="section-title">Knockout fixtures</div>
     <p class="section-desc">For each upcoming knockout match, the bar below shows how likely each result is — split into home win, draw, and away win — based on how both teams have performed in the tournament so far. Group-stage matches aren't shown here; this page only covers knockout rounds.</p>
     <div id="fixtures" class="empty-state">Loading fixtures…</div>
