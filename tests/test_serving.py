@@ -19,12 +19,9 @@ START = datetime(2026, 6, 1, tzinfo=UTC)
 
 
 def _train_tiny_model() -> bytes:
-    """A real, trained, tiny XGBoost model — same shape as production
-    (5 features, 3 classes), saved and reloaded as bytes."""
     rng = np.random.default_rng(42)
     x = rng.normal(size=(30, 5))
     y = rng.integers(0, 3, size=30)
-
     booster = xgb.train(
         {"objective": "multi:softprob", "num_class": 3, "max_depth": 2},
         xgb.DMatrix(x, label=y),
@@ -52,16 +49,18 @@ def _seed_champion(session, model_bytes: bytes | None = None) -> ModelVersion:
     return champion
 
 
-def _seed_upcoming_match(session, home_name="Home", away_name="Away") -> tuple[Team, Team, Match]:
-    home = Team(source_team_id=100, name=home_name)
-    away = Team(source_team_id=200, name=away_name)
+def _seed_upcoming_match(
+    session, home_name="Home", away_name="Away", stage="GROUP_STAGE", source_match_id=9001
+) -> tuple[Team, Team, Match]:
+    home = Team(source_team_id=source_match_id * 10 + 1, name=home_name)
+    away = Team(source_team_id=source_match_id * 10 + 2, name=away_name)
     session.add_all([home, away])
     session.flush()
 
     match = Match(
-        source_match_id=9001,
+        source_match_id=source_match_id,
         tournament_id="WC2026",
-        stage="GROUP_STAGE",
+        stage=stage,
         status="SCHEDULED",
         kickoff_utc=START + timedelta(days=1),
         home_team_id=home.id,
@@ -127,10 +126,10 @@ def test_returns_empty_list_when_no_upcoming_matches(session_factory):
         assert predictions == []
 
 
-def test_predicts_upcoming_match_with_team_names_and_valid_probabilities(session_factory):
+def test_predicts_upcoming_knockout_match_with_team_names_and_valid_probabilities(session_factory):
     with session_factory() as s:
         _seed_champion(s)
-        _seed_upcoming_match(s, home_name="Brazil", away_name="Norway")
+        _seed_upcoming_match(s, home_name="Brazil", away_name="Norway", stage="LAST_16")
         s.commit()
 
         predictions = get_upcoming_predictions(s)
@@ -143,10 +142,26 @@ def test_predicts_upcoming_match_with_team_names_and_valid_probabilities(session
         assert 0.0 <= p.prob_home <= 1.0
 
 
+def test_group_stage_matches_are_excluded_from_upcoming_predictions(session_factory):
+    with session_factory() as s:
+        _seed_champion(s)
+        # One group-stage match (should be excluded) and one knockout
+        # match (should be included) — distinct source_match_ids so
+        # both can coexist.
+        _seed_upcoming_match(s, "GroupHome", "GroupAway", stage="GROUP_STAGE", source_match_id=1001)
+        _seed_upcoming_match(s, "KOHome", "KOAway", stage="LAST_16", source_match_id=1002)
+        s.commit()
+
+        predictions = get_upcoming_predictions(s)
+
+        assert len(predictions) == 1
+        assert predictions[0].home_team_name == "KOHome"
+
+
 def test_predictions_are_logged_to_database(session_factory):
     with session_factory() as s:
         _seed_champion(s)
-        _seed_upcoming_match(s)
+        _seed_upcoming_match(s, stage="LAST_16")
         s.commit()
 
         get_upcoming_predictions(s)
@@ -159,11 +174,11 @@ def test_predictions_are_logged_to_database(session_factory):
 def test_serving_same_match_twice_does_not_duplicate_log(session_factory):
     with session_factory() as s:
         _seed_champion(s)
-        _seed_upcoming_match(s)
+        _seed_upcoming_match(s, stage="LAST_16")
         s.commit()
 
         get_upcoming_predictions(s)
-        get_upcoming_predictions(s)  # served again, e.g. a second API call
+        get_upcoming_predictions(s)
 
         logs = s.query(PredictionLog).all()
-        assert len(logs) == 1  # NOT 2 — this is the idempotency guarantee
+        assert len(logs) == 1

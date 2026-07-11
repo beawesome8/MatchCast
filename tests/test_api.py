@@ -46,7 +46,7 @@ def test_predictions_upcoming_returns_503_with_no_champion(session_factory, monk
 def test_predictions_upcoming_returns_real_predictions(session_factory, monkeypatch):
     with session_factory() as s:
         _seed_champion(s)
-        _seed_upcoming_match(s, home_name="Brazil", away_name="Norway")
+        _seed_upcoming_match(s, home_name="Brazil", away_name="Norway", stage="LAST_16")
         s.commit()
 
     client = _client(session_factory, monkeypatch)
@@ -71,3 +71,11 @@ def test_dashboard_root_serves_html(session_factory, monkeypatch):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "MatchCast" in response.text
+    
+def test_predictions_history_endpoint_returns_empty_shape(session_factory, monkeypatch):
+    client = _client(session_factory, monkeypatch)
+    response = client.get("/predictions/history")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 0
+    assert body["predictions"] == []

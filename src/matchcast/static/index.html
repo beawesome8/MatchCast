@@ -3,236 +3,324 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MatchCast</title>
+<title>MatchCast — Live World Cup 2026 Predictions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --home: #3fb950;
-    --draw: #d29922;
-    --away: #f85149;
-    --accent: #58a6ff;
+    --pitch: #0A1712;
+    --turf: #12261E;
+    --turf-line: #1F3A2E;
+    --chalk: #F4F1E6;
+    --mist: #9FB8AA;
+    --gold: #D9A94A;
+    --sky: #4A8CC0;
+    --slate: #8A99A3;
+    --whistle: #57C17E;
+    --card-red: #E06A5D;
   }
   * { box-sizing: border-box; }
+  @media (prefers-reduced-motion: no-preference) {
+    .fade-in { animation: fadeIn 0.4s ease-out both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--pitch);
+    background-image: radial-gradient(circle at 50% -10%, rgba(217,169,74,0.06), transparent 55%);
+    color: var(--chalk);
+    font-family: 'Inter', -apple-system, sans-serif;
     margin: 0;
-    padding: 2rem 1.5rem 4rem;
+    padding: 0 1.25rem 4rem;
   }
-  .wrap { max-width: 780px; margin: 0 auto; }
-  h1 { font-size: 1.9rem; margin-bottom: 0.25rem; }
-  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.25rem;
-  }
-  .card h2 {
-    font-size: 1.05rem;
-    margin: 0 0 1rem;
-    color: var(--text);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .badge {
+  a { color: var(--gold); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header { padding: 2.5rem 0 1.5rem; border-bottom: 1px solid var(--turf-line); }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    background: rgba(88, 166, 255, 0.15);
-    color: var(--accent);
-    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--mist);
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
   }
-  .match {
-    border-bottom: 1px solid var(--border);
-    padding: 0.9rem 0;
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.2rem;
+    letter-spacing: 0.02em;
+    margin: 0;
+    line-height: 1;
+    color: var(--chalk);
   }
-  .match:last-child { border-bottom: none; }
-  .match-top {
+  .tagline { color: var(--mist); margin-top: 0.6rem; font-size: 0.95rem; max-width: 50ch; line-height: 1.5; }
+
+  .scoreboard {
     display: flex;
-    justify-content: space-between;
-    font-size: 0.95rem;
-    margin-bottom: 0.5rem;
-  }
-  .match-meta { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
-  .prob-bar {
-    display: flex;
-    height: 22px;
-    border-radius: 5px;
+    flex-wrap: wrap;
+    margin: 1.5rem 0 0;
+    border: 1px solid var(--turf-line);
+    border-radius: 8px;
     overflow: hidden;
-    font-size: 0.7rem;
-    font-weight: 600;
   }
-  .prob-bar div {
+  .scoreboard .cell {
+    flex: 1;
+    min-width: 130px;
+    padding: 0.9rem 1rem;
+    border-right: 1px solid var(--turf-line);
+    background: var(--turf);
+  }
+  .scoreboard .cell:last-child { border-right: none; }
+  .scoreboard .cell .num { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 1.35rem; color: var(--gold); }
+  .scoreboard .cell .lbl { font-size: 0.7rem; color: var(--mist); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.15rem; }
+
+  .card {
+    background: var(--turf);
+    border: 1px solid var(--turf-line);
+    border-radius: 8px;
+    padding: 1.1rem 1.3rem;
+    margin-top: 1rem;
+  }
+  .card-eyebrow { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold); margin-bottom: 0.4rem; font-family: 'JetBrains Mono', monospace; }
+  .card p { margin: 0; font-size: 0.9rem; line-height: 1.6; color: var(--chalk); }
+
+  section { margin-top: 2.25rem; }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.35rem;
+    color: var(--chalk);
     display: flex;
     align-items: center;
-    justify-content: center;
-    color: #0d1117;
-    white-space: nowrap;
-    overflow: hidden;
+    gap: 0.6rem;
   }
-  .prob-home { background: var(--home); }
-  .prob-draw { background: var(--draw); }
-  .prob-away { background: var(--away); }
-  .stat-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
-  .stat {
-    flex: 1;
-    min-width: 140px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 8px;
-    padding: 0.9rem;
-    text-align: center;
-  }
-  .stat .value { font-size: 1.5rem; font-weight: 700; }
-  .stat .label { color: var(--muted); font-size: 0.75rem; margin-top: 0.2rem; }
-  .muted-note { color: var(--muted); font-size: 0.85rem; font-style: italic; }
-  .footer {
-    text-align: center;
-    color: var(--muted);
-    font-size: 0.8rem;
-    margin-top: 2rem;
-  }
-  .footer a { color: var(--accent); text-decoration: none; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { text-align: left; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; }
+  .section-title::before { content: ""; width: 4px; height: 1.1rem; background: var(--gold); display: inline-block; border-radius: 2px; }
+  .section-desc { color: var(--mist); font-size: 0.85rem; margin: 0 0 1rem; max-width: 62ch; line-height: 1.55; }
+
+  .fixture { background: var(--turf); border: 1px solid var(--turf-line); border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 0.75rem; }
+  .fixture-top { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .fixture-teams { font-weight: 600; font-size: 1.02rem; }
+  .fixture-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--mist); text-transform: uppercase; letter-spacing: 0.04em; }
+  .prob-bar { display: flex; height: 26px; border-radius: 5px; overflow: hidden; margin-top: 0.7rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; }
+  .prob-bar > div { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+  .prob-home { background: var(--gold); color: #1a1204; }
+  .prob-draw { background: var(--slate); color: #101617; }
+  .prob-away { background: var(--sky); color: #051019; }
+  .prob-legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.72rem; color: var(--mist); }
+  .prob-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  .history-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem 1rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--turf-line); font-size: 0.9rem; }
+  .history-row:last-child { border-bottom: none; }
+  .history-teams { font-weight: 600; }
+  .history-sub { font-size: 0.75rem; color: var(--mist); margin-top: 0.15rem; }
+  .result-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 5px; white-space: nowrap; }
+  .result-correct { background: rgba(87,193,126,0.16); color: var(--whistle); }
+  .result-wrong { background: rgba(224,106,93,0.16); color: var(--card-red); }
+  .brier-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--mist); text-align: right; }
+
+  .calibration-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+  .calibration-table th, .calibration-table td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--turf-line); }
+  .calibration-table th { color: var(--mist); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .calibration-table td { font-family: 'JetBrains Mono', monospace; }
+
+  .empty-state { color: var(--mist); font-size: 0.9rem; padding: 1.2rem 0; border: 1px dashed var(--turf-line); border-radius: 8px; text-align: center; }
+
+  footer { text-align: center; color: var(--mist); font-size: 0.8rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--turf-line); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>⚽ MatchCast</h1>
-  <p class="subtitle">Self-retraining World Cup 2026 match predictions — live, verifiable, honest about what it doesn't know yet.</p>
+  <header>
+    <div class="eyebrow">World Cup 2026 · Self-retraining predictions</div>
+    <h1>MATCHCAST</h1>
+    <p class="tagline">A machine-learning system that predicts World Cup knockout matches, retrains itself automatically as results come in, and keeps a public, permanent record of exactly how right or wrong it was — no editing after the fact.</p>
 
-  <div class="card" id="health-card">
-    <h2>Current champion <span class="badge" id="champion-badge">loading…</span></h2>
-    <p class="muted-note" id="health-detail">Checking model status…</p>
-  </div>
+    <div class="scoreboard fade-in" id="scoreboard">
+      <div class="cell"><div class="num" id="sb-champion">—</div><div class="lbl">Current model</div></div>
+      <div class="cell"><div class="num" id="sb-brier">—</div><div class="lbl">Error score (lower = better)</div></div>
+      <div class="cell"><div class="num" id="sb-hitrate">—</div><div class="lbl">% correct so far</div></div>
+      <div class="cell"><div class="num" id="sb-tracked">—</div><div class="lbl">Predictions tracked</div></div>
+    </div>
 
-  <div class="card">
-    <h2>Upcoming predictions</h2>
-    <div id="predictions">Loading predictions… (if this takes 30-60 seconds, the free-tier server is waking up)</div>
-  </div>
+    <div class="card fade-in" id="improvement-card">
+      <div class="card-eyebrow">Model trend</div>
+      <p>Loading…</p>
+    </div>
+  </header>
 
-  <div class="card">
-    <h2>Model performance</h2>
-    <div id="performance">Loading performance summary…</div>
-  </div>
+  <section>
+    <div class="section-title">Knockout fixtures</div>
+    <p class="section-desc">For each upcoming knockout match, the bar below shows how likely each result is — split into home win, draw, and away win — based on how both teams have performed in the tournament so far. Group-stage matches aren't shown here; this page only covers knockout rounds.</p>
+    <div id="fixtures" class="empty-state">Loading fixtures…</div>
+  </section>
 
-  <div class="footer">
+  <section>
+    <div class="section-title">Prediction record</div>
+    <p class="section-desc">Once a knockout match finishes, its prediction moves here permanently, next to what actually happened. A green ✓ means the model's top pick matched the result; a red ✗ means it didn't — nothing here can be edited after the fact. This list covers the Quarterfinals onward (July 9, 2026+); the stats above include every scored prediction from the whole tournament, including earlier rounds.</p>
+    <div id="history" class="empty-state">Loading prediction history…</div>
+  </section>
+
+  <section>
+    <div class="section-title">Is the model's confidence trustworthy?</div>
+    <p class="section-desc">This checks whether the model's stated confidence means what it says. If it claims "60–80% chance" on a group of predictions, roughly 60–80% of those should actually come true. Close match between the two columns below means the model isn't overconfident or underconfident.</p>
+    <div class="card" id="calibration">Loading…</div>
+  </section>
+
+  <footer>
     <a href="https://github.com/beawesome8/MatchCast" target="_blank">Source on GitHub</a> ·
     <a href="https://github.com/beawesome8/MatchCast/actions" target="_blank">Retraining history</a>
-  </div>
+    <div style="margin-top:0.4rem">Free-tier hosting — first load after idle time may take up to a minute.</div>
+  </footer>
 </div>
 
 <script>
-const pct = (x) => (x * 100).toFixed(1) + "%";
+const pct = (x) => x == null ? "—" : (x * 100).toFixed(1) + "%";
+const outcomeLabel = (code, home, away) =>
+  code === "HOME_TEAM" ? `${home} win` : code === "AWAY_TEAM" ? `${away} win` : "Draw";
+const fmtDate = (iso) => new Date(iso).toLocaleString(undefined, {
+  weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+});
 
-async function loadHealth() {
+async function loadScoreboard() {
   try {
-    const res = await fetch("/health");
-    const data = await res.json();
-    document.getElementById("champion-badge").textContent =
-      data.champion_model_version_id ? `v${data.champion_model_version_id}` : "none yet";
-    document.getElementById("health-detail").textContent =
-      data.champion_holdout_brier != null
-        ? `Held-out Brier score: ${data.champion_holdout_brier.toFixed(4)} (lower is better; 0.667 is random guessing)`
-        : "No champion model registered yet.";
+    const [health, perf] = await Promise.all([
+      fetch("/health").then(r => r.json()),
+      fetch("/monitoring/performance").then(r => r.json())
+    ]);
+    document.getElementById("sb-champion").textContent = health.champion_model_version_id ? `v${health.champion_model_version_id}` : "—";
+    document.getElementById("sb-brier").textContent = perf.overall_brier_score != null ? perf.overall_brier_score.toFixed(3) : "n/a yet";
+    document.getElementById("sb-hitrate").textContent = perf.hit_rate != null ? pct(perf.hit_rate) : "n/a yet";
+    document.getElementById("sb-tracked").textContent = perf.n_predictions_logged;
+  } catch (e) { /* leaving dashes in place is an acceptable degraded state */ }
+}
+
+async function loadImprovement() {
+  const el = document.getElementById("improvement-card");
+  try {
+    const perf = await fetch("/monitoring/performance").then(r => r.json());
+    const first = perf.first_model_holdout_brier;
+    const current = perf.current_champion_holdout_brier;
+    if (first == null || current == null) {
+      el.querySelector("p").textContent = "Not enough retraining history yet to show a trend.";
+      return;
+    }
+    const delta = first - current;
+    const relPct = first !== 0 ? (delta / first * 100) : 0;
+    let msg;
+    if (Math.abs(delta) < 0.001) {
+      msg = `No meaningful change yet — the model has retrained since it first ran, but its error score hasn't moved (still ${current.toFixed(4)}). This is expected early on and should shift as more matches finish.`;
+    } else if (delta > 0) {
+      msg = `Improving: the error score has gone from ${first.toFixed(4)} down to ${current.toFixed(4)} since the first version — about ${relPct.toFixed(1)}% better at predicting outcomes.`;
+    } else {
+      msg = `Since the first version, the error score has moved from ${first.toFixed(4)} to ${current.toFixed(4)} — currently worse, not better. The promotion system only accepts genuine improvements, so this reflects normal noise on a small, early dataset, not a bug.`;
+    }
+    el.querySelector("p").textContent = msg;
   } catch (e) {
-    document.getElementById("health-detail").textContent = "Could not reach the API.";
+    el.querySelector("p").textContent = "Could not load the model trend.";
   }
 }
 
-async function loadPredictions() {
-  const el = document.getElementById("predictions");
+async function loadFixtures() {
+  const el = document.getElementById("fixtures");
   try {
     const res = await fetch("/predictions/upcoming");
     if (!res.ok) {
       const err = await res.json();
-      el.innerHTML = `<p class="muted-note">${err.detail || "No predictions available."}</p>`;
+      el.className = "empty-state";
+      el.textContent = err.detail || "No fixtures available right now.";
       return;
     }
     const data = await res.json();
     if (data.count === 0) {
-      el.innerHTML = `<p class="muted-note">No upcoming matches currently need predicting.</p>`;
+      el.className = "empty-state";
+      el.textContent = "No knockout fixtures need predicting right now — check back once the next round is set.";
       return;
     }
-    el.innerHTML = data.predictions.map(p => {
-      const kickoff = new Date(p.kickoff_utc).toLocaleString(undefined, {
-        weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
-      });
-      return `
-        <div class="match">
-          <div class="match-top">
-            <span>${p.home_team_name} vs ${p.away_team_name}</span>
-            <span>${pct(p.prob_home)} / ${pct(p.prob_draw)} / ${pct(p.prob_away)}</span>
-          </div>
-          <div class="match-meta">${p.stage || ""} · ${kickoff}</div>
-          <div class="prob-bar">
-            <div class="prob-home" style="width:${p.prob_home * 100}%">${p.prob_home > 0.12 ? pct(p.prob_home) : ""}</div>
-            <div class="prob-draw" style="width:${p.prob_draw * 100}%">${p.prob_draw > 0.12 ? pct(p.prob_draw) : ""}</div>
-            <div class="prob-away" style="width:${p.prob_away * 100}%">${p.prob_away > 0.12 ? pct(p.prob_away) : ""}</div>
-          </div>
-        </div>`;
-    }).join("");
+    el.className = "";
+    el.innerHTML = data.predictions.map(p => `
+      <div class="fixture fade-in">
+        <div class="fixture-top">
+          <div class="fixture-teams">${p.home_team_name} vs ${p.away_team_name}</div>
+          <div class="fixture-meta">${(p.stage || "").replace(/_/g, " ")} · ${fmtDate(p.kickoff_utc)}</div>
+        </div>
+        <div class="prob-bar">
+          <div class="prob-home" style="width:${p.prob_home * 100}%">${p.prob_home > 0.12 ? pct(p.prob_home) : ""}</div>
+          <div class="prob-draw" style="width:${p.prob_draw * 100}%">${p.prob_draw > 0.12 ? pct(p.prob_draw) : ""}</div>
+          <div class="prob-away" style="width:${p.prob_away * 100}%">${p.prob_away > 0.12 ? pct(p.prob_away) : ""}</div>
+        </div>
+        <div class="prob-legend">
+          <span><span class="swatch" style="background:var(--gold)"></span>${p.home_team_name}</span>
+          <span><span class="swatch" style="background:var(--slate)"></span>Draw</span>
+          <span><span class="swatch" style="background:var(--sky)"></span>${p.away_team_name}</span>
+        </div>
+      </div>`).join("");
   } catch (e) {
-    el.innerHTML = `<p class="muted-note">Could not reach the API — it may still be waking up. Try refreshing in a minute.</p>`;
+    el.className = "empty-state";
+    el.textContent = "Could not reach the API — it may still be waking up. Try refreshing in a minute.";
   }
 }
 
-async function loadPerformance() {
-  const el = document.getElementById("performance");
+async function loadHistory() {
+  const el = document.getElementById("history");
+  try {
+    const res = await fetch("/predictions/history");
+    const data = await res.json();
+    if (data.count === 0) {
+      el.className = "empty-state";
+      el.textContent = "No Quarterfinal-onward predictions have been scored yet. Once a match finishes, its result lands here automatically.";
+      return;
+    }
+    el.className = "";
+    el.innerHTML = data.predictions.map(p => `
+      <div class="history-row fade-in">
+        <div>
+          <div class="history-teams">${p.home_team_name} vs ${p.away_team_name}</div>
+          <div class="history-sub">${fmtDate(p.kickoff_utc)} · Predicted ${outcomeLabel(p.predicted_outcome, p.home_team_name, p.away_team_name)} · Result: ${outcomeLabel(p.actual_outcome, p.home_team_name, p.away_team_name)}</div>
+        </div>
+        <span class="result-badge ${p.correct ? 'result-correct' : 'result-wrong'}">${p.correct ? "✓ correct" : "✗ missed"}</span>
+        <span class="brier-tag">Error ${p.brier_score.toFixed(3)}</span>
+      </div>`).join("");
+  } catch (e) {
+    el.className = "empty-state";
+    el.textContent = "Could not reach the API.";
+  }
+}
+
+async function loadCalibration() {
+  const el = document.getElementById("calibration");
   try {
     const res = await fetch("/monitoring/performance");
     const data = await res.json();
-
-    if (data.n_predictions_scored === 0) {
-      el.innerHTML = `
-        <div class="stat-row">
-          <div class="stat"><div class="value">${data.n_predictions_logged}</div><div class="label">predictions logged</div></div>
-          <div class="stat"><div class="value">${data.n_predictions_pending}</div><div class="label">awaiting results</div></div>
-        </div>
-        <p class="muted-note" style="margin-top:1rem">No predictions have been scored yet — this fills in automatically as matches finish.</p>`;
+    const rows = data.calibration.filter(b => b.n_predictions > 0);
+    if (rows.length === 0) {
+      el.innerHTML = `<p style="color:var(--mist)">Not enough scored predictions yet to check this — it fills in as matches finish.</p>`;
       return;
     }
-
-    const calibrationRows = data.calibration
-      .filter(b => b.n_predictions > 0)
-      .map(b => `
-        <tr>
-          <td>${(b.range_low * 100).toFixed(0)}–${(b.range_high * 100).toFixed(0)}%</td>
-          <td>${b.n_predictions}</td>
-          <td>${pct(b.avg_predicted_probability)}</td>
-          <td>${pct(b.observed_frequency)}</td>
-        </tr>`).join("");
-
     el.innerHTML = `
-      <div class="stat-row">
-        <div class="stat"><div class="value">${data.overall_brier_score.toFixed(4)}</div><div class="label">Brier score</div></div>
-        <div class="stat"><div class="value">${pct(data.hit_rate)}</div><div class="label">hit rate</div></div>
-        <div class="stat"><div class="value">${data.n_predictions_scored}</div><div class="label">scored</div></div>
-      </div>
-      <table style="margin-top:1.25rem">
-        <thead><tr><th>Confidence bucket</th><th>N</th><th>Avg predicted</th><th>Actually correct</th></tr></thead>
-        <tbody>${calibrationRows || "<tr><td colspan=4>Not enough data yet</td></tr>"}</tbody>
+      <table class="calibration-table">
+        <thead><tr><th>Model said</th><th>How many times</th><th>Avg. confidence</th><th>Actually right</th></tr></thead>
+        <tbody>${rows.map(b => `
+          <tr>
+            <td>${(b.range_low * 100).toFixed(0)}–${(b.range_high * 100).toFixed(0)}%</td>
+            <td>${b.n_predictions}</td>
+            <td>${pct(b.avg_predicted_probability)}</td>
+            <td>${pct(b.observed_frequency)}</td>
+          </tr>`).join("")}</tbody>
       </table>`;
   } catch (e) {
-    el.innerHTML = `<p class="muted-note">Could not reach the API.</p>`;
+    el.innerHTML = `<p style="color:var(--mist)">Could not reach the API.</p>`;
   }
 }
 
 function loadAll() {
-  loadHealth();
-  loadPredictions();
-  loadPerformance();
+  loadScoreboard();
+  loadImprovement();
+  loadFixtures();
+  loadHistory();
+  loadCalibration();
 }
-
 loadAll();
 setInterval(loadAll, 60000);
 </script>

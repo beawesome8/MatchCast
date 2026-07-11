@@ -7,7 +7,7 @@ average, hit rate, calibration bucket) is checkable by hand.
 from datetime import UTC, datetime
 
 from matchcast.models import IngestionQuarantine, Match, ModelVersion, PredictionLog, Team
-from matchcast.monitoring import get_performance_summary
+from matchcast.monitoring import get_performance_summary, get_prediction_history
 
 START = datetime(2026, 7, 1, tzinfo=UTC)
 
@@ -30,7 +30,7 @@ def _seed_model_version(session, status="champion", holdout_brier=0.5) -> ModelV
     return mv
 
 
-def _seed_match(session, source_id: int) -> Match:
+def _seed_match(session, source_id: int, kickoff_utc=None) -> Match:
     home = Team(source_team_id=source_id * 10 + 1, name=f"Home{source_id}")
     away = Team(source_team_id=source_id * 10 + 2, name=f"Away{source_id}")
     session.add_all([home, away])
@@ -40,7 +40,7 @@ def _seed_match(session, source_id: int) -> Match:
         tournament_id="WC2026",
         stage="GROUP_STAGE",
         status="FINISHED",
-        kickoff_utc=START,
+        kickoff_utc=kickoff_utc or START,
         home_team_id=home.id,
         away_team_id=away.id,
         home_goals=1,
@@ -197,3 +197,95 @@ def test_latest_model_version_is_reported(session_factory):
         summary = get_performance_summary(s)
         assert summary.latest_model_version_id == latest.id
         assert summary.latest_model_trained_at is not None
+        
+def test_prediction_history_empty_when_nothing_scored(session_factory):
+    with session_factory() as s:
+        assert get_prediction_history(s) == []
+
+
+def test_prediction_history_flags_correct_and_incorrect(session_factory):
+    with session_factory() as s:
+        mv = _seed_model_version(s)
+        late = datetime(2026, 7, 10, tzinfo=UTC)
+        match_a = _seed_match(s, source_id=1, kickoff_utc=late)
+        match_b = _seed_match(s, source_id=2, kickoff_utc=late)
+        _seed_scored_prediction(
+            s, match_a, mv, 0.7, 0.2, 0.1, actual_outcome="HOME_TEAM", brier_score=0.1
+        )
+        _seed_scored_prediction(
+            s, match_b, mv, 0.1, 0.2, 0.7, actual_outcome="HOME_TEAM", brier_score=1.5
+        )
+        s.commit()
+
+        history = get_prediction_history(s)
+        by_match = {h.match_id: h for h in history}
+        assert by_match[match_a.id].correct is True
+        assert by_match[match_b.id].correct is False
+
+
+def test_prediction_history_includes_team_names(session_factory):
+    with session_factory() as s:
+        mv = _seed_model_version(s)
+        match = _seed_match(s, source_id=1, kickoff_utc=datetime(2026, 7, 10, tzinfo=UTC))
+        _seed_scored_prediction(
+            s, match, mv, 0.8, 0.1, 0.1, actual_outcome="HOME_TEAM", brier_score=0.05
+        )
+        s.commit()
+
+        history = get_prediction_history(s)
+        assert history[0].home_team_name == "Home1"
+        assert history[0].away_team_name == "Away1"
+        
+def test_prediction_history_excludes_matches_before_july_9(session_factory):
+    with session_factory() as s:
+        mv = _seed_model_version(s)
+        early_match = _seed_match(s, source_id=1)  # kickoff is START = July 1
+        _seed_scored_prediction(
+            s, early_match, mv, 0.7, 0.2, 0.1, actual_outcome="HOME_TEAM", brier_score=0.1
+        )
+        s.commit()
+
+        assert get_prediction_history(s) == []
+
+
+def test_prediction_history_includes_matches_on_or_after_july_9(session_factory):
+    with session_factory() as s:
+        mv = _seed_model_version(s)
+        home = Team(source_team_id=501, name="LateHome")
+        away = Team(source_team_id=502, name="LateAway")
+        s.add_all([home, away])
+        s.flush()
+        late_match = Match(
+            source_match_id=501,
+            tournament_id="WC2026",
+            stage="QUARTER_FINALS",
+            status="FINISHED",
+            kickoff_utc=datetime(2026, 7, 9, 20, 0, tzinfo=UTC),
+            home_team_id=home.id,
+            away_team_id=away.id,
+            home_goals=1,
+            away_goals=0,
+            winner="HOME_TEAM",
+        )
+        s.add(late_match)
+        s.flush()
+        _seed_scored_prediction(
+            s, late_match, mv, 0.7, 0.2, 0.1, actual_outcome="HOME_TEAM", brier_score=0.1
+        )
+        s.commit()
+
+        history = get_prediction_history(s)
+        assert len(history) == 1
+        assert history[0].home_team_name == "LateHome"
+
+
+def test_performance_summary_reports_first_and_current_model_brier(session_factory):
+    with session_factory() as s:
+        _seed_model_version(s, status="retired", holdout_brier=0.62)
+        _seed_model_version(s, status="champion", holdout_brier=0.55)
+        s.commit()
+
+        summary = get_performance_summary(s)
+        assert summary.first_model_holdout_brier == 0.62
+        assert summary.current_champion_holdout_brier == 0.55
+        assert abs(summary.brier_improvement - 0.07) < 1e-9

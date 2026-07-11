@@ -1,17 +1,18 @@
 """Prediction serving: load the current champion, score upcoming
-matches, and log every prediction before returning it.
+KNOCKOUT matches, and log every prediction before returning it.
+
+Group-stage matches are excluded here deliberately — MatchCast's
+public prediction feed is knockout-stage only, by design. Training
+(features.py's build_feature_table) still uses ALL matches, group
+stage included; this filter is a serving-layer/product decision, not
+a feature-computation one, so it lives here rather than in features.py.
 
 No FastAPI code lives here — api.py is a thin HTTP wrapper around
 get_upcoming_predictions() below, so this logic is testable with a
 plain database session, no HTTP client required.
 
 Loading uses xgboost's core Booster API, not the sklearn XGBClassifier
-wrapper. The sklearn wrapper's load_model() calls scikit-learn's
-is_classifier(), which has a known incompatibility with the
-tag-inspection system introduced in scikit-learn 1.6 — it crashes on
-load (not on train, which is why the training pipeline never hit
-this). The Booster API does pure inference with no sklearn dependency
-at all, sidestepping the issue entirely.
+wrapper — see load_model_from_bytes for why.
 """
 
 import tempfile
@@ -27,6 +28,9 @@ from matchcast.features import build_upcoming_features
 from matchcast.models import PredictionLog, Team
 from matchcast.registry import get_current_champion
 from matchcast.train import FEATURE_COLUMNS, OUTCOME_LABELS
+
+# The only WC2026 stage MatchCast does NOT serve predictions for.
+NON_KNOCKOUT_STAGES = {"GROUP_STAGE"}
 
 
 @dataclass
@@ -71,7 +75,9 @@ def get_upcoming_predictions(session: Session) -> list[MatchPrediction]:
 
     booster = load_model_from_bytes(champion.model_bytes)
 
-    upcoming = build_upcoming_features(session)
+    upcoming = [
+        row for row in build_upcoming_features(session) if row["stage"] not in NON_KNOCKOUT_STAGES
+    ]
     if not upcoming:
         return []
 
@@ -82,8 +88,6 @@ def get_upcoming_predictions(session: Session) -> list[MatchPrediction]:
 
     x = np.array([[row[col] for col in FEATURE_COLUMNS] for row in upcoming])
     dmatrix = xgb.DMatrix(x)
-    # Trained with objective="multi:softprob", so predict() returns
-    # shape (n_samples, n_classes) probabilities directly.
     probs = booster.predict(dmatrix)
 
     predictions = []
@@ -112,9 +116,7 @@ def get_upcoming_predictions(session: Session) -> list[MatchPrediction]:
 
 def _log_prediction(session: Session, prediction: MatchPrediction) -> None:
     """Idempotent: re-serving the same match under the same champion
-    does not create a duplicate log row. A NEW champion predicting the
-    same match DOES get its own row — that's a genuinely new, distinct
-    prediction worth recording."""
+    does not create a duplicate log row."""
     existing = session.execute(
         select(PredictionLog).where(
             PredictionLog.match_id == prediction.match_id,

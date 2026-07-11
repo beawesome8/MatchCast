@@ -1,5 +1,5 @@
-"""FastAPI serving layer — a thin HTTP wrapper around serving.py.
-All prediction logic lives there so it's testable without spinning
+"""FastAPI serving layer — a thin HTTP wrapper around serving.py and
+monitoring.py. All logic lives there so it's testable without spinning
 up a real HTTP server."""
 
 from dataclasses import asdict
@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from matchcast.db import get_session_factory, init_db
-from matchcast.monitoring import get_performance_summary
+from matchcast.monitoring import get_performance_summary, get_prediction_history
 from matchcast.registry import get_current_champion
 from matchcast.serving import get_upcoming_predictions
 
@@ -48,6 +48,13 @@ def predictions_upcoming():
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {"count": len(predictions), "predictions": [vars(p) for p in predictions]}
+
+
+@app.get("/predictions/history")
+def predictions_history():
+    with get_session_factory()() as session:
+        history = get_prediction_history(session)
+    return {"count": len(history), "predictions": [asdict(h) for h in history]}
 
 
 @app.get("/monitoring/performance")

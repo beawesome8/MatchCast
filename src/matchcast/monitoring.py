@@ -1,6 +1,6 @@
 """Monitoring: aggregate real, scored predictions into a performance
 summary — Brier score, hit rate, calibration, and basic pipeline
-health signals.
+health signals — plus a match-by-match prediction history.
 
 Every number here comes from predictions_log rows that were logged
 BEFORE kickoff (serving.py) and scored AFTER the match finished
@@ -9,13 +9,22 @@ is built around, never a backtest.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchcast.models import IngestionQuarantine, ModelVersion, PredictionLog
+from matchcast.models import IngestionQuarantine, Match, ModelVersion, PredictionLog, Team
 
 CALIBRATION_BINS = [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01)]
+
+# The public "Prediction record" list starts from the Quarterfinals
+# onward, at the project owner's request — Round of 16 predictions
+# logged earlier in development are excluded from that specific list.
+# This does NOT affect overall_brier_score / hit_rate / calibration
+# below, which still include every scored prediction from the whole
+# tournament — that distinction is called out in the UI, not hidden.
+HISTORY_TRACK_RECORD_START = datetime(2026, 7, 9, tzinfo=UTC)
 
 
 @dataclass
@@ -47,6 +56,26 @@ class PerformanceSummary:
     n_quarantined_batches: int
     latest_model_version_id: int | None
     latest_model_trained_at: str | None
+    first_model_holdout_brier: float | None
+    current_champion_holdout_brier: float | None
+    brier_improvement: float | None  # first - current; positive = improved
+
+
+@dataclass
+class PredictionHistoryEntry:
+    match_id: int
+    home_team_name: str
+    away_team_name: str
+    stage: str | None
+    kickoff_utc: str
+    prob_home: float
+    prob_draw: float
+    prob_away: float
+    predicted_outcome: str
+    actual_outcome: str
+    correct: bool
+    brier_score: float
+    model_version_id: int
 
 
 def _predicted_class_and_prob(log: PredictionLog) -> tuple[str, float]:
@@ -62,8 +91,6 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
     n_logged = len(all_logs)
     n_scored = len(scored_logs)
 
-    # (log, predicted_class, predicted_probability) — computed once,
-    # reused by every summary below instead of recomputed repeatedly.
     scored = [(log, *_predicted_class_and_prob(log)) for log in scored_logs]
 
     overall_brier = None
@@ -83,17 +110,13 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
         else:
             avg_pred = None
             observed = None
-        calibration.append(
-            CalibrationBin(low, min(high, 1.0), len(bucket), avg_pred, observed)
-        )
+        calibration.append(CalibrationBin(low, min(high, 1.0), len(bucket), avg_pred, observed))
 
     by_version: dict[int, list[PredictionLog]] = {}
     for log, _, _ in scored:
         by_version.setdefault(log.model_version_id, []).append(log)
 
-    model_versions = {
-        mv.id: mv for mv in session.execute(select(ModelVersion)).scalars().all()
-    }
+    model_versions = {mv.id: mv for mv in session.execute(select(ModelVersion)).scalars().all()}
 
     by_model_version = []
     for version_id, logs in sorted(by_version.items()):
@@ -123,6 +146,24 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
         .limit(1)
     ).scalar_one_or_none()
 
+    first_model = session.execute(
+        select(ModelVersion)
+        .order_by(ModelVersion.created_at.asc(), ModelVersion.id.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    current_champion = session.execute(
+        select(ModelVersion).where(ModelVersion.status == "champion")
+    ).scalar_one_or_none()
+
+    first_brier = first_model.holdout_brier if first_model else None
+    current_brier = current_champion.holdout_brier if current_champion else None
+    brier_improvement = (
+        first_brier - current_brier
+        if first_brier is not None and current_brier is not None
+        else None
+    )
+
     return PerformanceSummary(
         n_predictions_logged=n_logged,
         n_predictions_scored=n_scored,
@@ -133,7 +174,71 @@ def get_performance_summary(session: Session) -> PerformanceSummary:
         by_model_version=by_model_version,
         n_quarantined_batches=n_quarantined,
         latest_model_version_id=latest_model.id if latest_model else None,
-        latest_model_trained_at=(
-            latest_model.created_at.isoformat() if latest_model else None
-        ),
+        latest_model_trained_at=(latest_model.created_at.isoformat() if latest_model else None),
+        first_model_holdout_brier=first_brier,
+        current_champion_holdout_brier=current_brier,
+        brier_improvement=brier_improvement,
     )
+
+
+def get_prediction_history(session: Session, limit: int = 50) -> list[PredictionHistoryEntry]:
+    """Every SCORED prediction for a match that kicked off on or after
+    HISTORY_TRACK_RECORD_START, most recent first. This is the public
+    "how did we actually do" record — deliberately scoped to the
+    Quarterfinals onward; see the module-level constant's docstring."""
+    logs = (
+        session.execute(
+            select(PredictionLog)
+            .where(PredictionLog.actual_outcome.is_not(None))
+            .order_by(PredictionLog.created_at.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    if not logs:
+        return []
+
+    match_ids = {log.match_id for log in logs}
+    matches = {
+        m.id: m
+        for m in session.execute(select(Match).where(Match.id.in_(match_ids))).scalars()
+    }
+
+    logs = [
+        log
+        for log in logs
+        if (m := matches.get(log.match_id)) is not None
+        and m.kickoff_utc >= HISTORY_TRACK_RECORD_START
+    ]
+    if not logs:
+        return []
+
+    team_ids = {tid for m in matches.values() for tid in (m.home_team_id, m.away_team_id)}
+    teams = {
+        t.id: t.name
+        for t in session.execute(select(Team).where(Team.id.in_(team_ids))).scalars()
+    }
+
+    entries = []
+    for log in logs:
+        match = matches[log.match_id]
+        predicted_class, _ = _predicted_class_and_prob(log)
+        entries.append(
+            PredictionHistoryEntry(
+                match_id=log.match_id,
+                home_team_name=teams.get(match.home_team_id, "Unknown"),
+                away_team_name=teams.get(match.away_team_id, "Unknown"),
+                stage=match.stage,
+                kickoff_utc=match.kickoff_utc.isoformat(),
+                prob_home=log.prob_home,
+                prob_draw=log.prob_draw,
+                prob_away=log.prob_away,
+                predicted_outcome=predicted_class,
+                actual_outcome=log.actual_outcome,
+                correct=(predicted_class == log.actual_outcome),
+                brier_score=log.brier_score,
+                model_version_id=log.model_version_id,
+            )
+        )
+    return entries
